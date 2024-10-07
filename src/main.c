@@ -28,16 +28,18 @@ Purpose : Generic application start
 // Custom defines
 ///////////////////////////////////////////////////////////////////////////////
 
-#define sigA PA2
-#define sigB PA3
+#define sigA PA6
+#define sigB PA8
 
 
 //#define DELAY_TIM TIM2
 
 #define cntTIM TIM16
+#define printTIM TIM2
 
 // Define Global variables
-int speed; // where 0 = cw and 1 = ccw
+float speed;
+int delCount; // where 0 = cw and 1 = ccw
 int posA, posB;
 
 // Function used by printf to send characters to the laptop
@@ -51,28 +53,26 @@ int _write(int file, char *ptr, int len) {
 
 
 int main(void) {
-    // Configure flash to add waitstates to avoid timing errors
-    configureFlash();
+    printf("Starting... \n");
+    //// Configure flash to add waitstates to avoid timing errors
+    //configureFlash();
 
-    // CONFIGURE CLOCKS IN RCC: (do we still have to Setup the PLL and switch clock source to the PLL)
-    configureClock();
+    //// CONFIGURE CLOCKS IN RCC: (do we still have to Setup the PLL and switch clock source to the PLL)
+    //configureClock();
  
-    //clock source control
-    RCC->CFGR |= (1<<10); //bits 10:8 (PPRE1) where 0xx is HCLK not divided
-    RCC->CFGR |= (1<<7) ; // AHB Prescaler, (HPRE[3:0] = 0xxx)
+    ////clock source control
+    //RCC->CFGR |= (1<<10); //bits 10:8 (PPRE1) where 0xx is HCLK not divided
+    //RCC->CFGR |= (1<<7) ; // AHB Prescaler, (HPRE[3:0] = 0xxx)
 
     //enable timer (pg 245)
     RCC->APB2ENR |= (1<<17); //enable timer 16
+    RCC->APB2ENR |= RCC_APB2ENR_TIM16EN; //enable tim16
+    RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN; //enable tim2
 
     //initialize timer @ 100kHz
-    initTIM(cntTIM);
+    initcntTIM(cntTIM); // @100kHz
+    initTIM(printTIM); //1ms
 
-    /////////////////////////////////////////////////////////
-    ///////// code from interrupt tutorial
-    ////////////////////////////////////////////////////////
-    ////////initialize timer 
-    //////RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
-    //////initTIM(cntTIM);
 
     // Enable sigA and sigB as inputs
     gpioEnable(GPIO_PORT_A);
@@ -81,13 +81,12 @@ int main(void) {
     GPIOA->PUPDR |= _VAL2FLD(GPIO_PUPDR_PUPD2, 0b01); // Set PA2 as pull-up
     GPIOA->PUPDR |= _VAL2FLD(GPIO_PUPDR_PUPD3, 0b01); // TODO Set PA3 as pull-up
 
-
     // TODO
     // 1. Enable SYSCFG clock domain in RCC
     RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
     // 2. Configure EXTICR for the input button interrupt (pg. 328)
-    SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI2, 0b000); // Select PA2
-    SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI3, 0b000); // Select PA3
+    SYSCFG->EXTICR[2] |= _VAL2FLD(SYSCFG_EXTICR2_EXTI6, 0b000); // Select PA6
+    SYSCFG->EXTICR[3] |= _VAL2FLD(SYSCFG_EXTICR3_EXTI8, 0b000); // Select PA8
 
     //////////////////////////////////////
     //////// INTERRUPTS (HW external interrupt procedure described pg. 327)
@@ -95,7 +94,7 @@ int main(void) {
     // Enable interrupts globally
     __enable_irq();
 
-    //Interrupts for SigA = PA2 (pg. 330)
+    //Interrupts for SigA = PA6 (pg. 330)
     // TODO: Configure interrupt for falling AND RISING edge of GPIO pin for button
     // 1. Configure mask bit
     EXTI->IMR1 |= (1 << gpioPinOffset(sigA)); // Configure the mask bit
@@ -104,62 +103,72 @@ int main(void) {
     // 3. Enable falling edge trigger
     EXTI->FTSR1 |= (1 << gpioPinOffset(sigA));// Enable falling edge trigger
     // 4. Turn on EXTI interrupt in NVIC_ISER (321
-    NVIC->ISER[0] |= (1 << EXTI2_IRQn);
+    //NVIC->ISER[0] |= (1 << EXTI2_IRQn);
 
-    //Interrupts for SigB = PA3
+    //Interrupts for SigB = PA8
     // TODO: Configure interrupt for falling AND RISING edge of GPIO pin for button
     // 1. Configure mask bit
-    EXTI->IMR2 |= (1 << gpioPinOffset(sigB)); // Configure the mask bit
+    EXTI->IMR1 |= (1 << gpioPinOffset(sigB)); // Configure the mask bit
     // 2. ENABLE rising edge trigger (enable interrupt generation)
-    EXTI->RTSR2 |= (1 << gpioPinOffset(sigB));// 
+    EXTI->RTSR1 |= (1 << gpioPinOffset(sigB));// 
     // 3. Enable falling edge trigger
-    EXTI->FTSR2 |= (1 << gpioPinOffset(sigB));// Enable falling edge trigger
+    EXTI->FTSR1 |= (1 << gpioPinOffset(sigB));// Enable falling edge trigger
     // 4. Turn on EXTI interrupt in NVIC_ISER
-    NVIC->ISER[0] |= (1 << EXTI3_IRQn);
+    NVIC->ISER[0] |= (1 << EXTI9_5_IRQn);
 
     while (1){
       // calc speed (delT between rising edges)
-      speed = abs(posA-posB); //TODO: make expressions based on posA, posB
-      printf("Current speed: %d \n", speed);
+      delCount = abs(posA-posB); //TODO: make expressions based on posA, posB
 
+      speed = 1.0/(120.0*4.0*(delCount/1000000.0));
+
+      printf("Current del: %d \n", delCount);
+      printf("Current speed: %f \n", speed);
       // calc direction
       if (posA > posB){
         printf("Current direction: ccw \n");
-      } else{
+      } else {
         printf("Current direction: cw \n");
       }
+
+      delay_millis(printTIM, 1000);
     }
 }
 
 // rising/falling edge of A
-void EXTI2_IRQHandler(void){
+void EXTI9_5_IRQHandler(void){
     // Check that the button was what triggered our interrupt
-    if (EXTI->PR1 & (1 << 0)){
+     
+    //B
+    if (EXTI->PR1 & (1 <<8)){
         // If so, clear the interrupt (NB: Write 1 to reset.)
-        EXTI->PR1 |= (1 << 0);
-
-        //check counter and set as PosB PosB = CNT
-        posA = cntTIM->CNT;
-
-        //reset counter CNT = 0
-        cntTIM->CNT = 0;
-    }
-}
-
-//rising/falling edge of B
-void EXTI3_IRQHandler(void){
-    // Check that the button was what triggered our interrupt
-    if (EXTI->PR1 & (1 <<0 )){
-        // If so, clear the interrupt (NB: Write 1 to reset.)
-        EXTI->PR1 |= (1 <<0 );
+        EXTI->PR1 |= (1 <<8 );
 
         //check counter and set as PosB PosB = CNT
         posB = cntTIM->CNT;
 
         //reset counter CNT = 0
         cntTIM->CNT = 0;
+
+         // Generate an update event to update prescaler value
+        cntTIM->EGR |= 1;
+    }
+    
+    //A
+    if (EXTI->PR1 & (1 << 6)){
+        // If so, clear the interrupt (NB: Write 1 to reset.)
+        EXTI->PR1 |= (1 << 6);
+
+        //check counter and set as PosA PosA = CNT
+        posA = cntTIM->CNT;
+
+        //reset counter CNT = 0
+        cntTIM->CNT = 0;         
+       // Generate an update event to update prescaler value
+        cntTIM->EGR |= 1;
     }
 }
+
 
 
 

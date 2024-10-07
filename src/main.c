@@ -28,13 +28,13 @@ Purpose : Generic application start
 // Custom defines
 ///////////////////////////////////////////////////////////////////////////////
 
-#define sigA PA5
-#define sigB PA4
-#define BUTTON_PIN PA5
+#define sigA PA2
+#define sigB PA3
+
 
 //#define DELAY_TIM TIM2
 
-#define cntTIM TIM2
+#define cntTIM TIM16
 
 // Define Global variables
 int speed; // where 0 = cw and 1 = ccw
@@ -51,45 +51,84 @@ int _write(int file, char *ptr, int len) {
 
 
 int main(void) {
-  //initialize timer 
-  RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
-  initTIM(cntTIM);
+    // Configure flash to add waitstates to avoid timing errors
+    configureFlash();
 
-  // Enable sigA as input
-  gpioEnable(GPIO_PORT_A);
-  pinMode(sigA, GPIO_INPUT);
+    // CONFIGURE CLOCKS IN RCC: (do we still have to Setup the PLL and switch clock source to the PLL)
+    configureClock();
  
-  // Enable sigB as input
-  gpioEnable(GPIO_PORT_A);
-  pinMode(sigB, GPIO_INPUT);
-  GPIOA->PUPDR |= _VAL2FLD(GPIO_PUPDR_PUPD2, 0b01); // Set PA2 as pull-up
+    //clock source control
+    RCC->CFGR |= (1<<10); //bits 10:8 (PPRE1) where 0xx is HCLK not divided
+    RCC->CFGR |= (1<<7) ; // AHB Prescaler, (HPRE[3:0] = 0xxx)
+
+    //enable timer (pg 245)
+    RCC->APB2ENR |= (1<<17); //enable timer 16
+
+    //initialize timer @ 100kHz
+    initTIM(cntTIM);
+
+    /////////////////////////////////////////////////////////
+    ///////// code from interrupt tutorial
+    ////////////////////////////////////////////////////////
+    ////////initialize timer 
+    //////RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
+    //////initTIM(cntTIM);
+
+    // Enable sigA and sigB as inputs
+    gpioEnable(GPIO_PORT_A);
+    pinMode(sigA, GPIO_INPUT);
+    pinMode(sigB, GPIO_INPUT);
+    GPIOA->PUPDR |= _VAL2FLD(GPIO_PUPDR_PUPD2, 0b01); // Set PA2 as pull-up
+    GPIOA->PUPDR |= _VAL2FLD(GPIO_PUPDR_PUPD3, 0b01); // TODO Set PA3 as pull-up
 
 
-  // Enable interrupts globally
-  __enable_irq();
+    // TODO
+    // 1. Enable SYSCFG clock domain in RCC
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+    // 2. Configure EXTICR for the input button interrupt (pg. 328)
+    SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI2, 0b000); // Select PA2
+    SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI3, 0b000); // Select PA3
 
-  // TODO: Configure interrupt for falling AND RISING edge of GPIO pin for button
-  // 1. Configure mask bit
-  EXTI->IMR1 |= (1 << gpioPinOffset(BUTTON_PIN)); // Configure the mask bit
-  // 2. ENABLE rising edge trigger
-  EXTI->RTSR1 &= ~(1 << gpioPinOffset(BUTTON_PIN));// TODO: SWITCH TO ENABLE Disable rising edge trigger
-  // 3. Enable falling edge trigger
-  EXTI->FTSR1 |= (1 << gpioPinOffset(BUTTON_PIN));// Enable falling edge trigger
-  // 4. Turn on EXTI interrupt in NVIC_ISER
-  NVIC->ISER[0] |= (1 << EXTI2_IRQn);
+    //////////////////////////////////////
+    //////// INTERRUPTS (HW external interrupt procedure described pg. 327)
+    //////////////////////////////////////
+    // Enable interrupts globally
+    __enable_irq();
 
-  while (1){
-    // calc speed (delT between rising edges)
-    speed = abs(posA-posB); //TODO: make expressions based on posA, posB
-    printf("Current speed: %d \n", speed);
+    //Interrupts for SigA = PA2 (pg. 330)
+    // TODO: Configure interrupt for falling AND RISING edge of GPIO pin for button
+    // 1. Configure mask bit
+    EXTI->IMR1 |= (1 << gpioPinOffset(sigA)); // Configure the mask bit
+    // 2. ENABLE rising edge trigger (enable interrupt generation)
+    EXTI->RTSR1 |= (1 << gpioPinOffset(sigA));// 
+    // 3. Enable falling edge trigger
+    EXTI->FTSR1 |= (1 << gpioPinOffset(sigA));// Enable falling edge trigger
+    // 4. Turn on EXTI interrupt in NVIC_ISER (321
+    NVIC->ISER[0] |= (1 << EXTI2_IRQn);
 
-    // calc direction
-    if (posA > posB){
-      printf("Current direction: ccw \n");
-    } else{
-      printf("Current direction: cw \n");
+    //Interrupts for SigB = PA3
+    // TODO: Configure interrupt for falling AND RISING edge of GPIO pin for button
+    // 1. Configure mask bit
+    EXTI->IMR2 |= (1 << gpioPinOffset(sigB)); // Configure the mask bit
+    // 2. ENABLE rising edge trigger (enable interrupt generation)
+    EXTI->RTSR2 |= (1 << gpioPinOffset(sigB));// 
+    // 3. Enable falling edge trigger
+    EXTI->FTSR2 |= (1 << gpioPinOffset(sigB));// Enable falling edge trigger
+    // 4. Turn on EXTI interrupt in NVIC_ISER
+    NVIC->ISER[0] |= (1 << EXTI3_IRQn);
+
+    while (1){
+      // calc speed (delT between rising edges)
+      speed = abs(posA-posB); //TODO: make expressions based on posA, posB
+      printf("Current speed: %d \n", speed);
+
+      // calc direction
+      if (posA > posB){
+        printf("Current direction: ccw \n");
+      } else{
+        printf("Current direction: cw \n");
+      }
     }
-  }
 }
 
 // rising/falling edge of A

@@ -1,6 +1,10 @@
 // STM32F401RE_TIM.c
 // TIM functions
 
+// Victoria Parizot
+// vparizot@g.hmc.edu
+// 10/5/2024
+
 #include "STM32L432KC_TIM.h"
 #include "STM32L432KC_RCC.h"
 

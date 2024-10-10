@@ -1,6 +1,8 @@
 // STM32F401RE_TIM.h
 // Header for TIM functions
-
+// Victoria Parizot
+// vparizot@g.hmc.edu
+// 10/5/2024
 #ifndef STM32L4_TIM_H
 #define STM32L4_TIM_H
 

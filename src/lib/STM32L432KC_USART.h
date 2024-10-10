@@ -1,6 +1,8 @@
 // STM32F401RE_USART.h
 // Header for USART functions
-
+// Victoria Parizot
+// vparizot@g.hmc.edu
+// 10/5/2024
 #ifndef STM32L4_USART_H
 #define STM32L4_USART_H
 

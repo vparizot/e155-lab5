@@ -5,7 +5,9 @@
 #include "STM32L432KC_USART.h"
 #include "STM32L432KC_GPIO.h"
 #include "STM32L432KC_RCC.h"
-
+// Victoria Parizot
+// vparizot@g.hmc.edu
+// 10/5/2024
 USART_TypeDef * id2Port(int USART_ID) {
     USART_TypeDef * USART;
     switch(USART_ID){

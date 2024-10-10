@@ -1,6 +1,9 @@
 // STM32F401RE_RCC.c
 // Source code for RCC functions
 
+// Victoria Parizot
+// vparizot@g.hmc.edu
+// 10/5/2024
 #include "STM32L432KC_RCC.h"
 
 void configurePLL() {
